@@ -12,11 +12,9 @@ ruído gaussiano ao sinal.
 ## Como funciona
 
 ```
-TX:  Aplicação → Enlace → Física ─┐
-                                   ▼
-                     Meio de comunicação (ruído)
-                                   │
-RX:  Aplicação ← Enlace ← Física ◄─┘
+TX:  Aplicação -> Enlace -> Física -> 
+Meio de comunicação (ruído)
+RX:  Física -> Enlace -> Aplicação
 ```
 
 O transmissor e o receptor rodam em threads separadas e só se comunicam pelo meio.
