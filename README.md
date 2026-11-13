@@ -1,7 +1,7 @@
 # Simulador de Redes — TR1
 
 [![Testes](https://github.com/R2JustWind/Trabalho_Tr1/actions/workflows/tests.yml/badge.svg)](https://github.com/R2JustWind/Trabalho_Tr1/actions/workflows/tests.yml)
-![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![GTK](https://img.shields.io/badge/interface-GTK%203-green)
 
 Trabalho final de **Teleinformática e Redes 1 (UnB)**. Um chat de texto que simula
@@ -16,7 +16,7 @@ flowchart LR
     subgraph TX["Thread TX"]
         A1[Aplicação<br/>texto → bits] --> E1[Enlace<br/>enquadramento + EDC] --> F1[Física<br/>modulação]
     end
-    F1 --> M{{Meio de comunicação<br/>ruído n&#40;μ, σ&#41; em volts}}
+    F1 --> M{{"Meio de comunicação<br/>ruído n(μ, σ) em volts"}}
     subgraph RX["Thread RX"]
         F2[Física<br/>demodulação] --> E2[Enlace<br/>verificação/correção] --> A2[Aplicação<br/>bits → texto]
     end
