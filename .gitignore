@@ -1,0 +1,4 @@
+/docs_tr1_local/*
+/.codex/
+__pycache__/
+*.py[cod]
