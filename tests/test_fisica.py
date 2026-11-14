@@ -1,6 +1,6 @@
 """Testes da camada física. Rode com:  python3 test_fisica.py"""
 import numpy as np
-from CamadaFisica import (CONFIG_PADRAO, BANDAS_BASE, MODULACOES, N,
+from fisica.CamadaFisica import (CONFIG_PADRAO, BANDAS_BASE, MODULACOES, N,
                           fisica_tx, fisica_rx, validar_config)
 
 rng = np.random.default_rng(0)
