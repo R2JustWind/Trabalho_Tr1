@@ -6,7 +6,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
-from interface.codec import encode_message
+from InterfaceGUI import encode_message
 
 from enlace.CamadaEnlace import (
     ConfiguracaoEnlace,

@@ -1,9 +1,10 @@
+import threading
 import unittest
 
-from interface.adapter import LinkAdapter
-from interface.codec import MessageValidationError, decode_message, encode_message
-from interface.controller import ChatController
-from interface.models import (
+from InterfaceGUI import LinkAdapter
+from InterfaceGUI import MessageValidationError, decode_message, encode_message
+from InterfaceGUI import ChatController, SimulatorAdapter
+from InterfaceGUI import (
     LinkEvent,
     RxPayload,
     SimulationConfig,
@@ -52,6 +53,26 @@ class ChatTests(unittest.TestCase):
         self.assertIsNone(controller.receive(rejected))
         valid = RxPayload(b"recebida", "utf-8", "2", ValidationStatus.VALID)
         self.assertEqual(controller.receive(valid), "recebida")
+
+    def test_simulator_adapter_runs_end_to_end(self):
+        events = []
+        finished = threading.Event()
+        controller = ChatController(SimulatorAdapter())
+
+        def on_event(event):
+            events.append(event)
+            if event.state in {
+                TransmissionState.DELIVERED,
+                TransmissionState.REJECTED,
+                TransmissionState.FAILED,
+            }:
+                finished.set()
+
+        controller.send("A" * 300, SimulationConfig(), on_event)
+        self.assertTrue(finished.wait(10), "o simulador nao concluiu em 10 segundos")
+        self.assertEqual(events[-1].state, TransmissionState.DELIVERED)
+        self.assertIn("bits_aplicacao", events[-1].telemetry)
+        self.assertIn("sinal_tx_volts", events[-1].telemetry)
 
 
 if __name__ == "__main__":

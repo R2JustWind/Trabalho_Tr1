@@ -36,7 +36,7 @@ Os algoritmos são implementados do zero, sem bibliotecas externas.
 
 | Pasta | Conteúdo |
 |---|---|
-| `interface/` | Interface gráfica GTK e camada de aplicação |
+| `InterfaceGUI.py` | Interface gráfica GTK, aplicação de chat e adaptadores |
 | `enlace/` | Camada de enlace: enquadramento, detecção e correção de erros |
 | `simulador/` | Rotina principal com as threads TX e RX e o meio de comunicação |
 | `tests/` | Testes de todas as partes |
@@ -55,7 +55,7 @@ sudo apt install python3 python3-gi gir1.2-gtk-3.0 python3-matplotlib
 **Abrir a interface:**
 
 ```bash
-python3 -m interface.main
+python3 InterfaceGUI.py
 ```
 
 **Rodar os testes:**
