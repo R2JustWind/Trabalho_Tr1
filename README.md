@@ -46,12 +46,18 @@ Os algoritmos são implementados do zero, sem bibliotecas externas.
 
 O projeto roda no Linux. No Windows, use o WSL (no Windows 11 ele já abre janelas gráficas).
 
-**Instalar as dependências da interface** (Ubuntu/WSL):
+### Pré-requisitos obrigatórios
+
+Para abrir a interface gráfica, o ambiente precisa ter **GTK 3**, **PyGObject** e o backend GTK do Matplotlib instalados. GTK/PyGObject são dependências do sistema operacional e não são instalados pelo `requirements.txt`.
+
+O arquivo `requirements.txt` contém as dependências Python do projeto, principalmente NumPy e Matplotlib. No Ubuntu/WSL, instale também os pacotes do sistema:
 
 ```bash
 sudo apt update
 sudo apt install python3 python3-gi gir1.2-gtk-3.0 python3-matplotlib
 ```
+
+Esse requisito é necessário para executar `InterfaceGUI.py`. Sem GTK 3/PyGObject, os módulos podem ser importados para testes, mas a janela não será iniciada.
 
 **Abrir a interface:**
 
