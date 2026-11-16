@@ -37,6 +37,7 @@ Os algoritmos são implementados do zero, sem bibliotecas externas.
 | Pasta | Conteúdo |
 |---|---|
 | `InterfaceGUI.py` | Interface gráfica GTK, aplicação de chat e adaptadores |
+| `fisica/` | Camada física: Codificação e Decodificação em banda base, Modulação e Demodulação por portadora |
 | `enlace/` | Camada de enlace: enquadramento, detecção e correção de erros |
 | `simulador/` | Rotina principal com as threads TX e RX e o meio de comunicação |
 | `tests/` | Testes de todas as partes |
