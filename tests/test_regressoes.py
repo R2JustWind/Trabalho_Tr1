@@ -3,22 +3,22 @@
 import time
 import unittest
 
+from enlace.CamadaEnlace import (
+    ConfiguracaoEnlace,
+    TipoControleErro,
+    TipoEnquadramento,
+    bytes_para_bits,
+    camada_enlace_receptora,
+    camada_enlace_transmissora,
+)
 from InterfaceGUI import (
     ChatController,
     EnlaceLinkAdapter,
     SimulationConfig,
     TransmissionState,
 )
-from enlace.CamadaEnlace import (
-    ConfiguracaoEnlace,
-    TipoControleErro,
-    TipoEnquadramento,
-    camada_enlace_receptora,
-    camada_enlace_transmissora,
-)
-from enlace.bits import bytes_para_bits
-from simulador.Simulador import ConfiguracaoSimulacao, Simulador
 from simulador.canal import MeioComunicacao
+from simulador.Simulador import ConfiguracaoSimulacao, Simulador
 
 
 class RegressaoEnlace(unittest.TestCase):

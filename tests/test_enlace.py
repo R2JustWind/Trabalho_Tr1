@@ -1,23 +1,27 @@
 import random
 import unittest
 
-from enlace.bits import bits_para_bytes, bytes_para_bits
 from enlace.CamadaEnlace import (
+    ESC_BYTE,
+    FLAG_BYTE,
     TAMANHOS_CHECKSUM,
     ConfiguracaoEnlace,
     TipoControleErro,
     TipoEnquadramento,
+    bits_para_bytes,
+    bytes_para_bits,
     camada_enlace_receptora,
     camada_enlace_transmissora,
-)
-from enlace.correcao import codificar_hamming, decodificar_hamming
-from enlace.deteccao import gerar_checksum, gerar_crc, gerar_paridade_par, verificar_checksum, verificar_crc
-from enlace.enquadramento import (
-    ESC_BYTE,
-    FLAG_BYTE,
+    codificar_hamming,
+    decodificar_hamming,
     enquadrar_bit_stuffing,
     enquadrar_byte_stuffing,
     enquadrar_contagem_caracteres,
+    gerar_checksum,
+    gerar_crc,
+    gerar_paridade_par,
+    verificar_checksum,
+    verificar_crc,
 )
 
 

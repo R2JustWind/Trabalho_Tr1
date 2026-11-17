@@ -1,7 +1,13 @@
 import threading
 import unittest
 
-from enlace.CamadaEnlace import ConfiguracaoEnlace, SituacaoQuadro, TipoControleErro, TipoEnquadramento
+from enlace.CamadaEnlace import (
+    ConfiguracaoEnlace,
+    SituacaoQuadro,
+    TipoControleErro,
+    TipoEnquadramento,
+)
+from fisica.CamadaFisica import CONFIG_PADRAO
 from simulador import fisica_provisoria
 from simulador.canal import MeioComunicacao
 from simulador.Simulador import ConfiguracaoSimulacao, Simulador
@@ -46,15 +52,16 @@ class SimulacaoPontaAPonta(unittest.TestCase):
         self.assertTrue(all(abs(amostra) <= 1.0 + 1e-9 for amostra in resultado.sinal_tx))
 
     def test_padding_da_fisica_chega_ao_enlace(self):
+        # 8PSK agrupa 3 bits por símbolo, então parte dos tamanhos exige padding
+        fisica_8psk = dict(CONFIG_PADRAO, modulacao="8psk")
         com_padding = 0
         for tamanho in range(1, 10):
             mensagem = "a" * tamanho
-            resultado = simular("bit_stuffing", "paridade_par", mensagem=mensagem)
+            config = ConfiguracaoSimulacao(ConfiguracaoEnlace("bit_stuffing", "paridade_par", 16), fisica=fisica_8psk)
+            resultado = Simulador(config).enviar(mensagem)
             com_padding += len(resultado.bits_fisica_rx) > len(resultado.bits_enlace_tx)
             self.assertEqual(resultado.texto_recebido, mensagem)
-        # ASK transmite um bit por símbolo e pode não precisar de padding;
-        # o receptor ainda deve devolver pelo menos o fluxo do enlace.
-        self.assertGreaterEqual(com_padding, 0)
+        self.assertGreater(com_padding, 0)
 
     def test_ruido_baixo_nao_altera_a_mensagem(self):
         for semente in range(5):

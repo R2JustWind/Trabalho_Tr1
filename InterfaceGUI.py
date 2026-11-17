@@ -682,8 +682,14 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
             box.pack_start(self.status, False, False, 0)
             self.telemetry = Gtk.TextView()
             self.telemetry.set_editable(False)
+            self.telemetry.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
             self.telemetry.get_buffer().set_text("Bits e amostras indisponiveis ate o backend fornecer dados.")
-            box.pack_start(self.telemetry, True, True, 0)
+            # Rolagem própria: linhas longas de telemetria não podem alargar a janela
+            rolagem = Gtk.ScrolledWindow()
+            rolagem.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            rolagem.set_min_content_height(120)
+            rolagem.add(self.telemetry)
+            box.pack_start(rolagem, False, False, 0)
             self._build_plots(box)
             return frame
 
@@ -713,6 +719,7 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
             self.plot_tx.set_title("Sinal TX no canal (V/W)")
             self.plot_rx.set_title("Sinal RX com ruído (V/W)")
             self.canvas = FigureCanvas(self.figure)
+            self.canvas.set_size_request(-1, 340)
             box.pack_start(self.canvas, True, True, 0)
 
         def _config(self) -> SimulationConfig:

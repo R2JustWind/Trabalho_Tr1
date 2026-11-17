@@ -125,7 +125,7 @@ class Simulador:
                 except UnicodeDecodeError:
                     # Bits recuperados podem ainda não formar texto válido.
                     resultado.texto_recebido = ""
-        except queue.Empty as erro:
+        except queue.Empty:
             erros.append(TimeoutError("o receptor não recebeu sinal dentro do tempo limite"))
             meio.encerrar()
         except Exception as erro:
