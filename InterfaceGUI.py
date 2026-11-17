@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 import threading
+import math
 from typing import Any, Callable, Iterable, Mapping
 from uuid import uuid4
 
@@ -297,6 +298,7 @@ class SimulatorAdapter(LinkAdapter):
         "bipolar": "bipolar",
     }
     _CARRIER = {
+        "sem portadora": None,
         "ask": "ask",
         "fsk": "fsk",
         "8psk": "8psk",
@@ -346,16 +348,22 @@ class SimulatorAdapter(LinkAdapter):
         )
 
     @classmethod
-    def _run_physical_tx(cls, bits, physics_config):
+    def _run_physical_tx(cls, bits, physics_config, amostradores=None):
         from fisica.CamadaFisica import fisica_tx
 
-        return fisica_tx(bits, physics_config)["sinal"]
+        result = fisica_tx(bits, physics_config)
+        if amostradores is not None:
+            amostradores["banda_base_tx_volts"] = result["sinal_banda_base"]
+        return result["sinal"]
 
     @classmethod
-    def _run_physical_rx(cls, signal, physics_config):
+    def _run_physical_rx(cls, signal, physics_config, amostradores=None):
         from fisica.CamadaFisica import fisica_rx
 
-        return fisica_rx(signal, physics_config)["bits"]
+        result = fisica_rx(signal, physics_config)
+        if amostradores is not None:
+            amostradores["banda_base_rx_volts"] = result["sinal_banda_base"]
+        return result["bits"]
 
     def _run(self, payload: TxPayload, on_event: EventCallback) -> None:
         try:
@@ -363,13 +371,17 @@ class SimulatorAdapter(LinkAdapter):
 
             simulation_config = self._simulation_config(payload.configuration)
             physics_config = self._physics_config(payload.configuration)
+            amostradores = {}
             simulator = Simulador(
                 simulation_config,
-                fisica_transmissora=lambda bits: self._run_physical_tx(bits, physics_config),
-                fisica_receptora=lambda signal: self._run_physical_rx(signal, physics_config),
+                fisica_transmissora=lambda bits: self._run_physical_tx(bits, physics_config, amostradores),
+                fisica_receptora=lambda signal: self._run_physical_rx(signal, physics_config, amostradores),
             )
             result = simulator.enviar(decode_message(payload.payload, encoding=payload.encoding))
-            rejected = result.recepcao_enlace.houve_descarte
+            rejected = (
+                result.recepcao_enlace.houve_descarte
+                or not result.recepcao_enlace.quadros
+            )
             statuses = [
                 {"index": item.indice, "status": item.situacao.value, "detail": item.detalhe}
                 for item in result.recepcao_enlace.quadros
@@ -390,6 +402,8 @@ class SimulatorAdapter(LinkAdapter):
                 "bits_aplicacao": result.bits_aplicacao,
                 "bits_enlace_tx": result.bits_enlace_tx,
                 "bits_fisica_rx": result.bits_fisica_rx,
+                "banda_base_tx_volts": amostradores.get("banda_base_tx_volts", []),
+                "banda_base_rx_volts": amostradores.get("banda_base_rx_volts", []),
                 "sinal_tx_volts": result.sinal_tx,
                 "sinal_rx_volts": result.sinal_rx,
                 "quadros_enlace": statuses,
@@ -442,7 +456,17 @@ class ChatController:
             return None
         message = TxPayload(payload, self.encoding, uuid4().hex, configuration)
         self._emit(LinkEvent(TransmissionState.SUBMITTED, message.message_id), on_event)
-        self.adapter.submit(message, lambda event: self._emit(event, on_event))
+        try:
+            self.adapter.submit(message, lambda event: self._emit(event, on_event))
+        except Exception as exc:
+            self._emit(
+                LinkEvent(
+                    TransmissionState.FAILED,
+                    message.message_id,
+                    f"Falha ao iniciar a transmissão: {exc}",
+                ),
+                on_event,
+            )
         return message
 
     def receive(self, payload: RxPayload, on_event: EventCallback | None = None) -> str | None:
@@ -480,13 +504,20 @@ class ChatController:
                 "O adaptador atual nao fornece recepcao de bits.",
             ), on_event)
             return None
-        payload = receive_bits(
-            bits,
-            message_id,
-            configuration,
-            lambda event: self._emit(event, on_event),
-        )
-        return self.receive(payload, on_event)
+        try:
+            payload = receive_bits(
+                bits,
+                message_id,
+                configuration,
+                lambda event: self._emit(event, on_event),
+            )
+            return self.receive(payload, on_event)
+        except Exception as exc:
+            self._emit(
+                LinkEvent(TransmissionState.FAILED, message_id, f"Falha na recepção: {exc}"),
+                on_event,
+            )
+            return None
 
     def _emit(self, event: LinkEvent, on_event: EventCallback | None) -> None:
         self.state = event.state
@@ -505,7 +536,7 @@ METHODS = {
     "framing": ["contagem de caracteres", "entrelaçamento de bits", "byte stuffing", "bit stuffing"],
     "error": ["paridade par", "checksum", "CRC-32", "Hamming"],
     "baseband": ["NRZ-Polar", "Manchester", "Bipolar"],
-    "carrier": ["ASK", "FSK", "8PSK", "32-QAM"],
+    "carrier": ["Sem portadora", "ASK", "FSK", "8PSK", "32-QAM"],
 }
 
 try:
@@ -520,9 +551,11 @@ except (ImportError, ValueError):  # pragma: no cover - depende do Linux/GTK
 try:
     from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
     from matplotlib.figure import Figure
-except ImportError:  # pragma: no cover - dependencia opcional do ambiente
+    MATPLOTLIB_IMPORT_ERROR = None
+except (ImportError, ModuleNotFoundError, ValueError, RuntimeError) as exc:  # pragma: no cover - depende do ambiente
     Figure = None
     FigureCanvas = None
+    MATPLOTLIB_IMPORT_ERROR = exc
 
 
 def require_gtk() -> None:
@@ -619,6 +652,7 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 combo = self._combo(values, values[0])
                 self.controls[key] = combo
                 grid.attach(combo, 1, row, 1, 1)
+            self.controls["carrier"].connect("changed", self._on_carrier_changed)
             numeric = [
                 ("Tamanho maximo do quadro", "frame_size", "32"),
                 ("Tamanho do EDC", "edc_size", "0"),
@@ -632,6 +666,12 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 self.controls[key] = entry
                 grid.attach(entry, 1, row, 1, 1)
             return frame
+
+        def _on_carrier_changed(self, combo) -> None:
+            """Deixa claro quando a banda-base é a forma transmitida."""
+
+            uses_baseband = (combo.get_active_text() or "").casefold() == "sem portadora"
+            self.controls["baseband"].set_sensitive(uses_baseband)
 
         def _build_telemetry(self):
             """Cria a area que apresenta estados e telemetria real."""
@@ -650,8 +690,12 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
         def _build_plots(self, box) -> None:
             """Cria os graficos TX/RX quando Matplotlib GTK estiver disponivel."""
             if Figure is None or FigureCanvas is None:
+                motivo = f" Motivo: {MATPLOTLIB_IMPORT_ERROR}" if MATPLOTLIB_IMPORT_ERROR else ""
                 box.pack_start(
-                    Gtk.Label(label="Graficos indisponiveis: instale python3-matplotlib."),
+                    Gtk.Label(label=(
+                        "Graficos indisponiveis: instale python3-matplotlib, "
+                        f"python3-cairo e python3-gi-cairo.{motivo}"
+                    )),
                     False,
                     False,
                     0,
@@ -659,11 +703,15 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 self.figure = None
                 self.canvas = None
                 return
-            self.figure = Figure(figsize=(8, 4), dpi=90)
-            self.plot_tx = self.figure.add_subplot(211)
-            self.plot_rx = self.figure.add_subplot(212)
-            self.plot_tx.set_title("Sinal TX (V/W)")
-            self.plot_rx.set_title("Sinal RX (V/W)")
+            self.figure = Figure(figsize=(8, 6), dpi=90)
+            self.plot_baseband_tx = self.figure.add_subplot(221)
+            self.plot_baseband_rx = self.figure.add_subplot(222)
+            self.plot_tx = self.figure.add_subplot(223)
+            self.plot_rx = self.figure.add_subplot(224)
+            self.plot_baseband_tx.set_title("Banda base TX (V/W)")
+            self.plot_baseband_rx.set_title("Banda base RX (V/W)")
+            self.plot_tx.set_title("Sinal TX no canal (V/W)")
+            self.plot_rx.set_title("Sinal RX com ruído (V/W)")
             self.canvas = FigureCanvas(self.figure)
             box.pack_start(self.canvas, True, True, 0)
 
@@ -692,6 +740,8 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 raise ValueError("o tamanho maximo do quadro deve ser no maximo 255 bytes")
             if config.noise_standard_deviation < 0:
                 raise ValueError("o desvio padrao nao pode ser negativo")
+            if not math.isfinite(config.noise_mean) or not math.isfinite(config.noise_standard_deviation):
+                raise ValueError("media e desvio padrao precisam ser finitos")
             if config.error_control_method == "checksum" and config.edc_size not in (8, 16, 32):
                 raise ValueError("o tamanho do EDC do checksum deve ser 8, 16 ou 32")
             return config
@@ -743,6 +793,8 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                     if text is not None:
                         self.received.set_text(text)
                 self._plot_signals(
+                    event.telemetry.get("banda_base_tx_volts", []),
+                    event.telemetry.get("banda_base_rx_volts", []),
                     event.telemetry.get("sinal_tx_volts", []),
                     event.telemetry.get("sinal_rx_volts", []),
                 )
@@ -762,6 +814,8 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 "bits_aplicacao",
                 "bits_enlace_tx",
                 "bits_fisica_rx",
+                "banda_base_tx_volts",
+                "banda_base_rx_volts",
                 "sinal_tx_volts",
                 "sinal_rx_volts",
             }
@@ -774,20 +828,22 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 return f"n={length}; inicio={head}; fim={tail}"
             return str(value)
 
-        def _plot_signals(self, signal_tx, signal_rx) -> None:
-            """Atualiza os graficos com as amostras reais do simulador."""
+        def _plot_signals(self, baseband_tx, baseband_rx, signal_tx, signal_rx) -> None:
+            """Atualiza os quatro graficos com amostras reais do simulador."""
             if self.canvas is None:
                 return
-            self.plot_tx.clear()
-            self.plot_rx.clear()
-            self.plot_tx.set_title("Sinal TX (V/W)")
-            self.plot_rx.set_title("Sinal RX (V/W)")
-            if signal_tx is not None and len(signal_tx):
-                step_tx = max(1, len(signal_tx) // MAX_PLOT_POINTS)
-                self.plot_tx.plot(signal_tx[::step_tx])
-            if signal_rx is not None and len(signal_rx):
-                step_rx = max(1, len(signal_rx) // MAX_PLOT_POINTS)
-                self.plot_rx.plot(signal_rx[::step_rx])
+            plots = (
+                (self.plot_baseband_tx, baseband_tx, "Banda base TX (V/W)"),
+                (self.plot_baseband_rx, baseband_rx, "Banda base RX (V/W)"),
+                (self.plot_tx, signal_tx, "Sinal TX no canal (V/W)"),
+                (self.plot_rx, signal_rx, "Sinal RX com ruído (V/W)"),
+            )
+            for axis, signal, title in plots:
+                axis.clear()
+                axis.set_title(title)
+                if signal is not None and len(signal):
+                    step = max(1, len(signal) // MAX_PLOT_POINTS)
+                    axis.plot(signal[::step])
             self.figure.tight_layout()
             self.canvas.draw()
 

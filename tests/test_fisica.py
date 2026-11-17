@@ -115,15 +115,15 @@ def teste_outras_amplitudes():
 
 
 def tabela_potencia():
-    print("\nPico e potência média (A = 1 V, potência em 1 Ω):")
+    print("\nPico e potencia media (A = 1 V, potencia em 1 ohm):")
     for modulacao in MODULACOES[1:]:
         sinal = fisica_tx(rng.integers(0, 2, 3000).tolist(), configuracao(modulacao=modulacao))["sinal"]
-        print(f"  {modulacao:6s} pico {np.abs(sinal).max():.2f} V   potência média {np.mean(sinal ** 2):.2f} W")
+        print(f"  {modulacao:6s} pico {np.abs(sinal).max():.2f} V   potencia media {np.mean(sinal ** 2):.2f} W")
 
 def tabela_de_erros(media=0.0):
     sigmas = (0.1, 0.3, 0.5, 0.8, 1.0)
-    print(f"\nErros em 3000 bits, ruído com média {media} V (A = 1 V):")
-    print(f"{'técnica':>12s} " + " ".join(f"σ={s:<5}" for s in sigmas))
+    print(f"\nErros em 3000 bits, ruido com media {media} V (A = 1 V):")
+    print(f"{'tecnica':>12s} " + " ".join(f"sigma={s:<5}" for s in sigmas))
     linhas = [configuracao(banda_base=b, modulacao=None) for b in BANDAS_BASE]
     linhas += [configuracao(modulacao=m) for m in MODULACOES[1:]]
     for config in linhas:

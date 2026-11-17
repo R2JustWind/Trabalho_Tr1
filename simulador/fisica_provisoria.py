@@ -1,4 +1,5 @@
-# Camada física provisória em NRZ-Polar, só para o simulador rodar até a camada física do Arthur ficar pronta
+# Fallback físico simples para testes diretos do simulador.
+# A integração da GUI injeta as funções completas de fisica/CamadaFisica.py.
 
 from __future__ import annotations
 

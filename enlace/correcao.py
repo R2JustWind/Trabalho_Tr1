@@ -60,6 +60,8 @@ def gerar_hamming(payload: Bits) -> Bits:
 
 # Bits depois da última palavra completa são alinhamento
 def corrigir_hamming(corpo: Bits) -> Tuple[Bits, int, bool]:
+    if not corpo:
+        return [], 0, True
     payload: Bits = []
     corrigidos = 0
     total = len(corpo) // TAMANHO_PALAVRA_HAMMING

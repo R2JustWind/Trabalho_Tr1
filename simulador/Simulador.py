@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import threading
+import queue
+import time
+import math
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
 from InterfaceGUI import encode_message
+from fisica.CamadaFisica import CONFIG_PADRAO, fisica_rx, fisica_tx
 
 from enlace.CamadaEnlace import (
     ConfiguracaoEnlace,
@@ -17,7 +21,6 @@ from enlace.CamadaEnlace import (
     camada_enlace_transmissora,
 )
 
-from . import fisica_provisoria
 from .canal import MeioComunicacao, Sinal
 
 Bits = List[int]
@@ -33,6 +36,7 @@ class ConfiguracaoSimulacao:
     semente_ruido: Optional[int] = None
     codificacao: str = "utf-8"
     tempo_limite: float = 30.0
+    fisica: dict = field(default_factory=lambda: dict(CONFIG_PADRAO))
 
 
 # Guarda a saída de cada etapa para a interface mostrar e plotar
@@ -52,29 +56,43 @@ class Simulador:
     def __init__(
         self,
         config: ConfiguracaoSimulacao = ConfiguracaoSimulacao(),
-        fisica_transmissora: FisicaTransmissora = fisica_provisoria.camada_fisica_transmissora,
-        fisica_receptora: FisicaReceptora = fisica_provisoria.camada_fisica_receptora,
+        fisica_transmissora: FisicaTransmissora | None = None,
+        fisica_receptora: FisicaReceptora | None = None,
     ):
         self.config = config
-        self.fisica_transmissora = fisica_transmissora
-        self.fisica_receptora = fisica_receptora
+        if not isinstance(self.config.tempo_limite, (int, float)) or not math.isfinite(self.config.tempo_limite):
+            raise ValueError("tempo_limite precisa ser finito")
+        if self.config.tempo_limite <= 0:
+            raise ValueError("tempo_limite precisa ser maior que zero")
+        self.fisica_transmissora = fisica_transmissora or self._fisica_transmissora_real
+        self.fisica_receptora = fisica_receptora or self._fisica_receptora_real
+
+    def _fisica_transmissora_real(self, bits: Bits) -> Sinal:
+        return fisica_tx(bits, self.config.fisica)["sinal"].tolist()
+
+    def _fisica_receptora_real(self, sinal: Sinal) -> Bits:
+        return fisica_rx(sinal, self.config.fisica)["bits"]
 
     def enviar(self, texto: str) -> ResultadoSimulacao:
         meio = MeioComunicacao(self.config.media_ruido, self.config.desvio_ruido, self.config.semente_ruido)
         resultado = ResultadoSimulacao(texto_enviado=texto)
         erros: List[BaseException] = []
 
-        transmissor = threading.Thread(target=self._executar_transmissor, args=(texto, meio, resultado, erros), name="TX")
-        receptor = threading.Thread(target=self._executar_receptor, args=(meio, resultado, erros), name="RX")
+        transmissor = threading.Thread(target=self._executar_transmissor, args=(texto, meio, resultado, erros), name="TX", daemon=True)
+        receptor = threading.Thread(target=self._executar_receptor, args=(meio, resultado, erros), name="RX", daemon=True)
         receptor.start()
         transmissor.start()
+        inicio = time.monotonic()
         transmissor.join(self.config.tempo_limite)
-        receptor.join(self.config.tempo_limite)
+        restante = self.config.tempo_limite - (time.monotonic() - inicio)
+        if restante > 0:
+            receptor.join(restante)
 
         if erros:
             raise erros[0]
         if transmissor.is_alive() or receptor.is_alive():
-            raise TimeoutError("a simulação passou do tempo limite")
+            meio.encerrar()
+            raise TimeoutError("a simulação excedeu o tempo limite e foi interrompida")
         return resultado
 
     def _executar_transmissor(self, texto: str, meio: MeioComunicacao, resultado: ResultadoSimulacao,
@@ -97,8 +115,18 @@ class Simulador:
             resultado.sinal_rx = sinal
             resultado.bits_fisica_rx = self.fisica_receptora(sinal)
             resultado.recepcao_enlace = camada_enlace_receptora(resultado.bits_fisica_rx, self.config.enlace)
-            payload = bytes(bits_para_bytes(resultado.recepcao_enlace.payload))
-            # Se um quadro foi descartado a mensagem chega incompleta e pode cortar um caractere UTF-8 no meio
-            resultado.texto_recebido = payload.decode(self.config.codificacao, errors="replace")
+            if resultado.recepcao_enlace.houve_descarte:
+                # Não expõe texto parcial: a aplicação só deve receber payload validado.
+                resultado.texto_recebido = ""
+            else:
+                payload = bytes(bits_para_bytes(resultado.recepcao_enlace.payload))
+                try:
+                    resultado.texto_recebido = payload.decode(self.config.codificacao)
+                except UnicodeDecodeError:
+                    # Bits recuperados podem ainda não formar texto válido.
+                    resultado.texto_recebido = ""
+        except queue.Empty as erro:
+            erros.append(TimeoutError("o receptor não recebeu sinal dentro do tempo limite"))
+            meio.encerrar()
         except Exception as erro:
             erros.append(erro)

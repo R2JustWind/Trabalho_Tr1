@@ -72,7 +72,12 @@ class ChatTests(unittest.TestCase):
         self.assertTrue(finished.wait(10), "o simulador nao concluiu em 10 segundos")
         self.assertEqual(events[-1].state, TransmissionState.DELIVERED)
         self.assertIn("bits_aplicacao", events[-1].telemetry)
+        self.assertIn("banda_base_tx_volts", events[-1].telemetry)
+        self.assertIn("banda_base_rx_volts", events[-1].telemetry)
         self.assertIn("sinal_tx_volts", events[-1].telemetry)
+        self.assertIn("sinal_rx_volts", events[-1].telemetry)
+        self.assertGreater(len(events[-1].telemetry["banda_base_tx_volts"]), 0)
+        self.assertGreater(len(events[-1].telemetry["banda_base_rx_volts"]), 0)
 
 
 if __name__ == "__main__":

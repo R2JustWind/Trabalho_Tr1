@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import random
+import math
 from typing import List, Optional
 
 Sinal = List[float]
@@ -11,6 +12,13 @@ Sinal = List[float]
 
 class MeioComunicacao:
     def __init__(self, media: float = 0.0, desvio_padrao: float = 0.0, semente: Optional[int] = None):
+        try:
+            media = float(media)
+            desvio_padrao = float(desvio_padrao)
+        except (TypeError, ValueError) as erro:
+            raise ValueError("média e desvio padrão precisam ser números") from erro
+        if not math.isfinite(media) or not math.isfinite(desvio_padrao):
+            raise ValueError("média e desvio padrão precisam ser finitos")
         if desvio_padrao < 0:
             raise ValueError("o desvio padrão do ruído não pode ser negativo")
         self.media = media
@@ -19,6 +27,8 @@ class MeioComunicacao:
         self._fila: "queue.Queue[Optional[Sinal]]" = queue.Queue()
 
     def aplicar_ruido(self, sinal: Sinal) -> Sinal:
+        if any(not math.isfinite(float(amostra)) for amostra in sinal):
+            raise ValueError("o sinal precisa conter somente amostras finitas")
         return [amostra + self._gerador.gauss(self.media, self.desvio_padrao) for amostra in sinal]
 
     def enviar(self, sinal: Sinal) -> None:

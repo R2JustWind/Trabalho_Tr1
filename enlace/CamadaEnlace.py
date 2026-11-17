@@ -105,10 +105,13 @@ class StatusQuadro:
 class ResultadoRecepcao:
     payload: Bits
     quadros: List[StatusQuadro] = field(default_factory=list)
+    entrada_invalida: bool = False
 
     @property
     def houve_descarte(self) -> bool:
-        return any(q.situacao is SituacaoQuadro.DESCARTADO for q in self.quadros)
+        return self.entrada_invalida or any(
+            q.situacao is SituacaoQuadro.DESCARTADO for q in self.quadros
+        )
 
 
 _ENQUADRADORES: Dict[TipoEnquadramento, Tuple[Callable[[Bits], Bits], Callable[[Bits], List[QuadroExtraido]]]] = {
@@ -134,6 +137,10 @@ def _codificar(payload: Bits, config: ConfiguracaoEnlace) -> Bits:
 
 def _validar(corpo: Bits, config: ConfiguracaoEnlace) -> Tuple[Bits, SituacaoQuadro, str]:
     controle = config.controle_erro
+    # Todos os quadros saem do transmissor alinhados em bytes. Se o corpo
+    # perdeu/ganhou bits antes do EDC, ele não pode ser aceito como payload.
+    if len(corpo) % 8:
+        return [], SituacaoQuadro.DESCARTADO, "quadro fora do alinhamento em bytes"
     if controle is TipoControleErro.NENHUM:
         return corpo, SituacaoQuadro.OK, ""
 
@@ -165,7 +172,8 @@ def camada_enlace_transmissora(bits: Iterable[int | str], config: ConfiguracaoEn
 
     passo = config.tamanho_max_quadro * 8
     fluxo: Bits = []
-    for inicio in range(0, len(payload), passo):
+    intervalos = range(0, len(payload), passo) if payload else (0,)
+    for inicio in intervalos:
         corpo = alinhar_em_bytes(_codificar(payload[inicio:inicio + passo], config))
         fluxo += enquadrar(corpo)
     return fluxo
@@ -188,4 +196,6 @@ def camada_enlace_receptora(
                 payload, situacao, detalhe = [], SituacaoQuadro.DESCARTADO, "erro detectado no enquadramento"
         resultado.payload += payload
         resultado.quadros.append(StatusQuadro(indice, situacao, detalhe))
+    if not resultado.quadros:
+        resultado.entrada_invalida = True
     return resultado

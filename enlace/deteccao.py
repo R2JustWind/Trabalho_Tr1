@@ -80,6 +80,6 @@ def gerar_crc(payload: Bits, gerador: Bits = GERADOR_CRC32) -> Bits:
 # Divide o quadro recebido por G, resto diferente de zero indica erro
 def verificar_crc(corpo: Bits, gerador: Bits = GERADOR_CRC32) -> Tuple[Bits, bool]:
     grau = len(gerador) - 1
-    if len(corpo) <= grau:
+    if len(corpo) < grau:
         return [], False
     return corpo[:-grau], not any(resto_divisao_polinomial(corpo, gerador))

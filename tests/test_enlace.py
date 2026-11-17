@@ -121,6 +121,32 @@ class DeteccaoDeErros(unittest.TestCase):
                     erro = inverter(tx, inicio, inicio + tamanho - 1)
                     self.assertTrue(camada_enlace_receptora(erro, config).houve_descarte)
 
+    def test_quadro_perdido_por_erro_no_delimitador_e_acusado(self):
+        # Um erro no cabeçalho ou na flag não pode fazer um quadro sumir sem
+        # que o receptor perceba.
+        mensagem = aleatorio(44)  # dois quadros: 32 + 12 bytes
+        for enquadramento in TipoEnquadramento:
+            config = ConfiguracaoEnlace(enquadramento, "crc32", 32)
+            tx = camada_enlace_transmissora(bytes_para_bits(mensagem), config)
+            for posicao in range(len(tx)):
+                with self.subTest(enquadramento=enquadramento, posicao=posicao):
+                    rx = camada_enlace_receptora(inverter(tx, posicao) + [0] * 4, config)
+                    if not rx.houve_descarte:
+                        self.assertEqual(bytes(bits_para_bytes(rx.payload)), mensagem)
+
+    def test_canal_ruidoso_nunca_entrega_mensagem_errada_com_crc(self):
+        gerador = random.Random(5)
+        mensagem = aleatorio(44)
+        for enquadramento in TipoEnquadramento:
+            config = ConfiguracaoEnlace(enquadramento, "crc32", 32)
+            tx = camada_enlace_transmissora(bytes_para_bits(mensagem), config)
+            for _ in range(2000):
+                recebido = [bit ^ (gerador.random() < 0.01) for bit in tx] + [0] * 4
+                rx = camada_enlace_receptora(recebido, config)
+                self.assertEqual(len(rx.payload) % 8, 0)
+                if not rx.houve_descarte:
+                    self.assertEqual(bytes(bits_para_bytes(rx.payload)), mensagem)
+
     def test_entrelacamento_detecta_rajadas_de_ate_8_bits(self):
         config = ConfiguracaoEnlace("entrelacamento_bits", "nenhum", 16)
         tx = camada_enlace_transmissora(bytes_para_bits(aleatorio(16)), config)

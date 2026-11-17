@@ -33,13 +33,16 @@ def desenquadrar_contagem_caracteres(fluxo: Bits) -> List[QuadroExtraido]:
     while inicio + 8 <= len(fluxo):
         contagem = bits_para_inteiro(fluxo[inicio:inicio + 8])
         if contagem == 0:
-            break  # contagem 0 só aparece no padding da camada física
+            # Contagem zero só aparece no padding da física. Bits 1 depois
+            # dela indicam que um delimitador/cabeçalho foi corrompido.
+            if any(fluxo[inicio:]):
+                quadros.append(QuadroExtraido([], integro=False))
+            break
         fim = inicio + contagem * 8
         if fim > len(fluxo):
             quadros.append(QuadroExtraido([], integro=False))
             break
-        if contagem > 1:
-            quadros.append(QuadroExtraido(fluxo[inicio + 8:fim]))
+        quadros.append(QuadroExtraido(fluxo[inicio + 8:fim]))
         inicio = fim
     return quadros
 
@@ -59,7 +62,7 @@ def _paridades_das_colunas(corpo: Bits) -> Bits:
 def enquadrar_entrelacamento_bits(corpo: Bits) -> Bits:
     exigir_multiplo_de_8(corpo)
     linhas = len(corpo) // LARGURA_LINHA_ENTRELACAMENTO
-    if not 0 < linhas <= LIMITE_LINHAS_ENTRELACAMENTO:
+    if not 0 <= linhas <= LIMITE_LINHAS_ENTRELACAMENTO:
         raise ValueError(f"quadro com {linhas} linhas fora do limite de {LIMITE_LINHAS_ENTRELACAMENTO}")
     return inteiro_para_bits(linhas, 8) + corpo + _paridades_das_colunas(corpo)
 
@@ -71,6 +74,12 @@ def desenquadrar_entrelacamento_bits(fluxo: Bits) -> List[QuadroExtraido]:
     while inicio + 8 <= len(fluxo):
         linhas = bits_para_inteiro(fluxo[inicio:inicio + 8])
         if linhas == 0:
+            if any(fluxo[inicio:]):
+                quadros.append(QuadroExtraido([], integro=False))
+            elif not quadros:
+                # Quadro vazio explícito; depois de um quadro válido são
+                # apenas zeros de alinhamento/padding da física.
+                quadros.append(QuadroExtraido([]))
             break
         inicio_corpo = inicio + 8
         fim_corpo = inicio_corpo + linhas * largura
@@ -107,11 +116,15 @@ def desenquadrar_byte_stuffing(fluxo: Bits) -> List[QuadroExtraido]:
     quadros: List[QuadroExtraido] = []
     atual: List[int] | None = None
     escapando = False
+    dados_fora_de_quadro = False
 
     for byte in dados:
         if atual is None:
             if byte == FLAG_BYTE:
                 atual = []
+            elif byte:
+                # Fora de um quadro só pode haver padding (zeros).
+                dados_fora_de_quadro = True
             continue
         if escapando:
             atual.append(byte)
@@ -119,14 +132,13 @@ def desenquadrar_byte_stuffing(fluxo: Bits) -> List[QuadroExtraido]:
         elif byte == ESC_BYTE:
             escapando = True
         elif byte == FLAG_BYTE:
-            if atual:
-                quadros.append(QuadroExtraido(bytes_para_bits(atual)))
-                atual = None
+            quadros.append(QuadroExtraido(bytes_para_bits(atual)))
+            atual = None
             # duas flags seguidas: fim de um quadro e início do próximo
         else:
             atual.append(byte)
 
-    if atual:
+    if atual or dados_fora_de_quadro:
         quadros.append(QuadroExtraido([], integro=False))
     return quadros
 
@@ -160,6 +172,8 @@ def enquadrar_bit_stuffing(corpo: Bits) -> Bits:
 def desenquadrar_bit_stuffing(fluxo: Bits) -> List[QuadroExtraido]:
     quadros: List[QuadroExtraido] = []
     abertura = _buscar_flag(fluxo, 0)
+    # Bits 1 antes da primeira flag não são padding válido.
+    dados_fora_de_quadro = any(fluxo[:abertura] if abertura != -1 else fluxo)
 
     while abertura != -1:
         posicao = abertura + len(FLAG_BITS)
@@ -190,9 +204,18 @@ def desenquadrar_bit_stuffing(fluxo: Bits) -> List[QuadroExtraido]:
             if corpo:
                 quadros.append(QuadroExtraido([], integro=False))
             break
-        elif corpo:
+        elif fechamento != -1:
             quadros.append(QuadroExtraido(corpo))
-            abertura = _buscar_flag(fluxo, fechamento + len(FLAG_BITS))
+            fim = fechamento + len(FLAG_BITS)
+            abertura = _buscar_flag(fluxo, fim)
+            if abertura != -1:
+                dados_fora_de_quadro |= any(fluxo[fim:abertura])
+            else:
+                # Até sete bits ao fim podem ser padding da física.
+                sobra = fluxo[fim:]
+                dados_fora_de_quadro |= len(sobra) >= 8 and any(sobra)
         else:
             abertura = fechamento
+    if dados_fora_de_quadro:
+        quadros.append(QuadroExtraido([], integro=False))
     return quadros
