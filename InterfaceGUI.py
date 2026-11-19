@@ -576,13 +576,19 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
             self.controller = controller or ChatController(SimulatorAdapter())
             self.send_button = None
             self._build()
+            # Abre maximizada para caber em telas menores
+            self.maximize()
 
         def _build(self) -> None:
             """Monta a composicao visual sem acoplar widgets aos algoritmos."""
 
+            # Rolagem vertical na janela inteira: o conteúdo não precisa caber na altura da tela
+            rolagem_janela = Gtk.ScrolledWindow()
+            rolagem_janela.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.add(rolagem_janela)
             root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             root.set_border_width(12)
-            self.add(root)
+            rolagem_janela.add(root)
             title = Gtk.Label(label="Aplicacao de rede - Chat TX/RX")
             title.set_xalign(0)
             root.pack_start(title, False, False, 0)
@@ -709,7 +715,7 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 self.figure = None
                 self.canvas = None
                 return
-            self.figure = Figure(figsize=(8, 6), dpi=90)
+            self.figure = Figure(figsize=(8, 6), dpi=90, tight_layout=True)
             self.plot_baseband_tx = self.figure.add_subplot(221)
             self.plot_baseband_rx = self.figure.add_subplot(222)
             self.plot_tx = self.figure.add_subplot(223)
@@ -826,12 +832,17 @@ if Gtk is not None:  # pragma: no cover - requer display GTK
                 "sinal_tx_volts",
                 "sinal_rx_volts",
             }
+            # Converte arrays do NumPy em números simples, com volts arredondados em 2 casas
+            def _lista(parte) -> list:
+                itens = parte.tolist() if hasattr(parte, "tolist") else list(parte)
+                return [round(float(v), 2) if isinstance(v, float) else v for v in itens]
+
             if name in vector_names and hasattr(value, "__len__"):
                 length = len(value)
                 if length <= TELEMETRY_PREVIEW_ITEMS:
-                    return f"{list(value)} (n={length})"
-                head = list(value[:TELEMETRY_PREVIEW_ITEMS])
-                tail = list(value[-TELEMETRY_PREVIEW_ITEMS:])
+                    return f"{_lista(value)} (n={length})"
+                head = _lista(value[:TELEMETRY_PREVIEW_ITEMS])
+                tail = _lista(value[-TELEMETRY_PREVIEW_ITEMS:])
                 return f"n={length}; inicio={head}; fim={tail}"
             return str(value)
 
